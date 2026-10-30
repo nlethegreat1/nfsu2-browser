@@ -1,0 +1,13 @@
+# Espacio de trabajo que crea setup.sh (clon del original + lo que se genera a partir del juego)
+/work/
+/.venv/
+/deps/
+/gen/
+/out/
+node_modules/
+# Nunca se publica nada que venga del juego de EA
+*.exe
+*.EXE
+*.wasm
+*.bin
+*.data
