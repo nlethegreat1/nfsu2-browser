@@ -1,0 +1,65 @@
+name: Verificar personalización
+
+# Comprueba, sobre el original en el commit fijado (UPSTREAM), que la personalización se aplica sin errores,
+# que el TypeScript compila y que la página se construye sin Discord, donaciones ni «Changes from the original».
+# No necesita (ni debe tener) el juego de EA: solo construye la página, no el módulo del juego.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Clonar el original (commit fijado)
+        run: |
+          . ./UPSTREAM
+          git clone --quiet "$repo" upstream
+          git -C upstream checkout --quiet --detach "$commit"
+
+      - name: Línea base, original sin tocar (informativa)
+        working-directory: upstream/web
+        continue-on-error: true
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+          node build.mjs
+          node --test test/i18n.test.mjs
+
+      - name: Aplicar la personalización
+        run: node customize/apply.mjs upstream
+
+      - name: Aplicarla otra vez (idempotente)
+        run: node customize/apply.mjs upstream
+
+      - name: TypeScript
+        working-directory: upstream/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+
+      - name: Construir la página
+        working-directory: upstream/web
+        run: |
+          rm -rf dist dist-dev
+          node build.mjs
+
+      - name: Comprobar el resultado
+        working-directory: upstream/web
+        run: |
+          test -f dist/main.js && test -f dist/main.css && test -f dist/index.html
+          if grep -qiE 'discord|ko-fi|donate|id="changes"' dist/index.html; then echo "index.html aún tiene Discord/donaciones/Changes"; exit 1; fi
+          if grep -q '#donate' dist/main.js; then echo "main.js aún enlaza #donate"; exit 1; fi
+          grep -q 'menu-enter' dist/main.css || { echo "falta el menú neón en main.css"; exit 1; }
+          echo "OK: página construida con el menú personalizado"
+
+      - name: i18n tras la personalización (informativo)
+        working-directory: upstream/web
+        continue-on-error: true
+        run: node --test test/i18n.test.mjs
